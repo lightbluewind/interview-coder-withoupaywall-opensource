@@ -23,6 +23,11 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
   })
   
   ipcMain.handle("validate-api-key", async (_event, apiKey) => {
+    const provider = configHelper.loadConfig().apiProvider;
+    if (provider === "claude-code" || provider === "bedrock") {
+      return { valid: true };
+    }
+
     // First check the format
     if (!configHelper.isValidApiKeyFormat(apiKey)) {
       return { 

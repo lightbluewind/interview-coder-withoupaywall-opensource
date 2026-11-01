@@ -13,7 +13,7 @@ import { Button } from "../ui/button";
 import { Settings } from "lucide-react";
 import { useToast } from "../../contexts/toast";
 
-type APIProvider = "openai" | "gemini" | "anthropic" | "claude-code";
+type APIProvider = "openai" | "gemini" | "anthropic" | "claude-code" | "bedrock";
 
 type AIModel = {
   id: string;
@@ -29,6 +29,7 @@ type ModelCategory = {
   geminiModels: AIModel[];
   anthropicModels: AIModel[];
   claudeCodeModels: AIModel[];
+  bedrockModels: AIModel[];
 };
 
 // Define available models for each category
@@ -82,6 +83,18 @@ const modelCategories: ModelCategory[] = [
       { id: "claude-opus-4-8", name: "Claude Opus 4", description: "Most capable - best for hard problems" },
       { id: "claude-sonnet-4-6", name: "Claude Sonnet 4 (recommended)", description: "Best balance of speed and quality" },
       { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4", description: "Fastest - good for quick answers" }
+    ],
+    bedrockModels: [
+      {
+        id: "us.anthropic.claude-sonnet-4-6",
+        name: "Claude Sonnet 4.6",
+        description: "Best overall performance via AWS Bedrock"
+      },
+      {
+        id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        name: "Claude Haiku 4.5",
+        description: "Faster, cost-effective via AWS Bedrock"
+      }
     ]
   },
   {
@@ -133,6 +146,18 @@ const modelCategories: ModelCategory[] = [
       { id: "claude-opus-4-8", name: "Claude Opus 4", description: "Most capable - best for hard problems" },
       { id: "claude-sonnet-4-6", name: "Claude Sonnet 4 (recommended)", description: "Best balance of speed and quality" },
       { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4", description: "Fastest - good for quick answers" }
+    ],
+    bedrockModels: [
+      {
+        id: "us.anthropic.claude-sonnet-4-6",
+        name: "Claude Sonnet 4.6",
+        description: "Strong coding performance via AWS Bedrock"
+      },
+      {
+        id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        name: "Claude Haiku 4.5",
+        description: "Faster, cost-effective via AWS Bedrock"
+      }
     ]
   },
   {
@@ -164,17 +189,38 @@ const modelCategories: ModelCategory[] = [
       }
     ],
     anthropicModels: [
-      { id: "claude-opus-4-8", name: "Claude Opus 4", description: "Most capable model for deep debugging" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4", description: "Best balance of speed and intelligence" },
-      { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4", description: "Fastest model for quick debugging" },
-      { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", description: "Previous generation flagship" },
-      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", description: "Balanced performance and speed" },
-      { id: "claude-3-opus-20240229", name: "Claude 3 Opus", description: "Top-level intelligence and understanding" }
+      {
+        id: "claude-3-7-sonnet-20250219",
+        name: "Claude 3.7 Sonnet",
+        description: "Best for analyzing code and error messages"
+      },
+      {
+        id: "claude-3-5-sonnet-20241022",
+        name: "Claude 3.5 Sonnet",
+        description: "Balanced performance and speed"
+      },
+      {
+        id: "claude-3-opus-20240229",
+        name: "Claude 3 Opus",
+        description: "Top-level intelligence, fluency, and understanding"
+      }
     ],
     claudeCodeModels: [
       { id: "claude-opus-4-8", name: "Claude Opus 4", description: "Most capable - best for hard problems" },
       { id: "claude-sonnet-4-6", name: "Claude Sonnet 4 (recommended)", description: "Best balance of speed and quality" },
       { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4", description: "Fastest - good for quick answers" }
+    ],
+    bedrockModels: [
+      {
+        id: "us.anthropic.claude-sonnet-4-6",
+        name: "Claude Sonnet 4.6",
+        description: "Best debugging via AWS Bedrock"
+      },
+      {
+        id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        name: "Claude Haiku 4.5",
+        description: "Faster, cost-effective via AWS Bedrock"
+      }
     ]
   }
 ];
@@ -278,6 +324,10 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
       setSolutionModel("claude-sonnet-4-6");
       setDebuggingModel("claude-sonnet-4-6");
       checkClaudeCodeStatus();
+    } else if (provider === "bedrock") {
+      setExtractionModel("us.anthropic.claude-sonnet-4-6");
+      setSolutionModel("us.anthropic.claude-sonnet-4-6");
+      setDebuggingModel("us.anthropic.claude-sonnet-4-6");
     }
   };
 
@@ -285,7 +335,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
     setIsLoading(true);
     try {
       const result = await window.electronAPI.updateConfig({
-        apiKey: apiProvider === "claude-code" ? "" : apiKey,
+        apiKey: apiProvider === "claude-code" || apiProvider === "bedrock" ? "" : apiKey,
         apiProvider,
         extractionModel,
         solutionModel,
@@ -427,10 +477,26 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
                 </div>
               </div>
             </div>
+            <div
+              className={`w-full p-2 rounded-lg cursor-pointer transition-colors ${
+                apiProvider === "bedrock"
+                  ? "bg-white/10 border border-white/20"
+                  : "bg-black/30 border border-white/5 hover:bg-white/5"
+              }`}
+              onClick={() => handleProviderChange("bedrock")}
+            >
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${apiProvider === "bedrock" ? "bg-white" : "bg-white/20"}`} />
+                <div className="flex flex-col">
+                  <p className="font-medium text-white text-sm">AWS Bedrock</p>
+                  <p className="text-xs text-white/60">Use AWS credentials from your environment</p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* API key input - hidden for claude-code */}
-          {apiProvider !== "claude-code" ? (
+          {/* API key input - hidden for credential-chain providers */}
+          {apiProvider !== "claude-code" && apiProvider !== "bedrock" ? (
           <div className="space-y-2">
             <label className="text-sm font-medium text-white" htmlFor="apiKey">
               {apiProvider === "openai" ? "OpenAI API Key" :
@@ -476,7 +542,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
               )}
             </div>
           </div>
-          ) : (
+          ) : apiProvider === "claude-code" ? (
           /* Claude Code auth status panel */
           <div className="space-y-2">
             <label className="text-sm font-medium text-white">Claude Code Status</label>
@@ -521,6 +587,16 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
               >
                 {claudeCodeChecking ? "Checking..." : "Refresh status"}
               </button>
+            </div>
+          </div>
+          ) : (
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-white">AWS Credentials</label>
+            <div className="mt-2 p-3 rounded-md bg-white/5 border border-white/10">
+              <p className="text-xs text-white/80 mb-2">Bedrock uses your AWS credentials from the environment.</p>
+              <p className="text-xs text-white/60 mb-1">1. Run <code className="bg-black/50 px-1 rounded">aws sso login</code> in terminal</p>
+              <p className="text-xs text-white/60 mb-1">2. Ensure AWS_REGION is set (default: us-east-1)</p>
+              <p className="text-xs text-white/60">3. Verify with <code className="bg-black/50 px-1 rounded">aws bedrock list-foundation-models</code></p>
             </div>
           </div>
           )}
@@ -580,6 +656,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
                 apiProvider === "openai" ? category.openaiModels :
                 apiProvider === "gemini" ? category.geminiModels :
                 apiProvider === "claude-code" ? category.claudeCodeModels :
+                apiProvider === "bedrock" ? category.bedrockModels :
                 category.anthropicModels;
               
               return (
@@ -644,7 +721,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
           <Button
             className="px-4 py-3 bg-white text-black rounded-xl font-medium hover:bg-white/90 transition-colors"
             onClick={handleSave}
-            disabled={isLoading || (apiProvider !== "claude-code" && !apiKey)}
+            disabled={isLoading || (apiProvider !== "claude-code" && apiProvider !== "bedrock" && !apiKey)}
           >
             {isLoading ? "Saving..." : "Save Settings"}
           </Button>

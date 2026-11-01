@@ -96,3 +96,27 @@ Take the Bedrock provider source and only the `@aws-sdk/client-bedrock-runtime` 
 - PR #153: cherry-pick selectively; source/provider behavior only.
 - PR #156: cherry-pick selectively; Bedrock source and minimal dependency declaration only.
 - Expected conflicts are concentrated in `ProcessingHelper.ts`, `ConfigHelper.ts`, and `SettingsDialog.tsx`; resolve only when the intent is unambiguous and preserve the cleanup branch's dead-code removals.
+
+---
+
+## Part 3 — Verification (re-run independently)
+
+The Codex run stopped after applying both PRs but before executing its own Part 3 checks,
+and left PR #156 uncommitted. Both were re-verified here on the merged working tree:
+
+| command | result | baseline |
+| --- | --- | --- |
+| `npx tsc --noEmit` | exit 2, **48 errors** | 48 — identical, no new |
+| `npx eslint src electron` | exit 1, **88 errors** | **91** on HEAD → no new, 3 fewer |
+| `npm run build` | **exit 0**, `dist/` + `dist-electron/` produced | — |
+
+Commit layout: `6bc308b` takes PR #153 (Claude Code CLI provider). The following commit
+takes PR #156's Bedrock source plus the single `@aws-sdk/client-bedrock-runtime`
+dependency — no lockfile rewrite, no Electron pin, no Darwin-only Rollup entry, no
+unrelated prompt rewrites.
+
+Open items left for the owner (not fixed here):
+- Bedrock `hasApiKey()` / `testApiKey()` still report valid without checking AWS credentials.
+- Missing region silently defaults to `us-east-1`; `awsRegion` is not exposed in Settings.
+- `stealth-run.sh` from PR #153 was not taken (it deletes `.env` and build dirs).
+- `CLAUDE.md` from PR #153 was not taken (agent-instruction file).

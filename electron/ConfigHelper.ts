@@ -7,12 +7,13 @@ import { OpenAI } from "openai"
 
 interface Config {
   apiKey: string;
-  apiProvider: "openai" | "gemini" | "anthropic" | "claude-code";
+  apiProvider: "openai" | "gemini" | "anthropic" | "claude-code" | "bedrock";
   extractionModel: string;
   solutionModel: string;
   debuggingModel: string;
   language: string;
   opacity: number;
+  awsRegion?: string;
 }
 
 export class ConfigHelper extends EventEmitter {
@@ -58,7 +59,7 @@ export class ConfigHelper extends EventEmitter {
   /**
    * Validate and sanitize model selection to ensure only allowed models are used
    */
-  private sanitizeModelSelection(model: string, provider: "openai" | "gemini" | "anthropic" | "claude-code"): string {
+  private sanitizeModelSelection(model: string, provider: Config["apiProvider"]): string {
     if (provider === "openai") {
       // Only allow gpt-4o and gpt-4o-mini for OpenAI
       const allowedModels = ['gpt-4o', 'gpt-4o-mini'];
@@ -90,6 +91,13 @@ export class ConfigHelper extends EventEmitter {
         return 'claude-sonnet-4-6';
       }
       return model;
+    } else if (provider === "bedrock") {
+      const allowedModels = ['us.anthropic.claude-sonnet-4-6', 'us.anthropic.claude-haiku-4-5-20251001-v1:0', 'us.anthropic.claude-opus-4-6-v1'];
+      if (!allowedModels.includes(model)) {
+        console.warn(`Invalid Bedrock model specified: ${model}. Using default model: us.anthropic.claude-sonnet-4-6`);
+        return 'us.anthropic.claude-sonnet-4-6';
+      }
+      return model;
     }
     // Default fallback
     return model;
@@ -102,7 +110,7 @@ export class ConfigHelper extends EventEmitter {
         const config = JSON.parse(configData);
         
         // Ensure apiProvider is a valid value
-        const validProviders = ["openai", "gemini", "anthropic", "claude-code"];
+        const validProviders = ["openai", "gemini", "anthropic", "claude-code", "bedrock"];
         if (!validProviders.includes(config.apiProvider)) {
           config.apiProvider = "gemini";
         }
@@ -190,6 +198,10 @@ export class ConfigHelper extends EventEmitter {
           updates.extractionModel = "claude-sonnet-4-6";
           updates.solutionModel = "claude-sonnet-4-6";
           updates.debuggingModel = "claude-sonnet-4-6";
+        } else if (updates.apiProvider === "bedrock") {
+          updates.extractionModel = "us.anthropic.claude-sonnet-4-6";
+          updates.solutionModel = "us.anthropic.claude-sonnet-4-6";
+          updates.debuggingModel = "us.anthropic.claude-sonnet-4-6";
         } else {
           updates.extractionModel = "gemini-2.0-flash";
           updates.solutionModel = "gemini-2.0-flash";
@@ -233,13 +245,15 @@ export class ConfigHelper extends EventEmitter {
     const config = this.loadConfig();
     // claude-code authenticates via the Claude Code CLI - no API key required
     if (config.apiProvider === "claude-code") return true;
+    // Bedrock uses the AWS SDK credential chain rather than an API key.
+    if (config.apiProvider === "bedrock") return true;
     return !!config.apiKey && config.apiKey.trim().length > 0;
   }
   
   /**
    * Validate the API key format
    */
-  public isValidApiKeyFormat(apiKey: string, provider?: "openai" | "gemini" | "anthropic" ): boolean {
+  public isValidApiKeyFormat(apiKey: string, provider?: Config["apiProvider"] ): boolean {
     // If provider is not specified, attempt to auto-detect
     if (!provider) {
       if (apiKey.trim().startsWith('sk-')) {
@@ -302,7 +316,7 @@ export class ConfigHelper extends EventEmitter {
   /**
    * Test API key with the selected provider
    */
-  public async testApiKey(apiKey: string, provider?: "openai" | "gemini" | "anthropic"): Promise<{valid: boolean, error?: string}> {
+  public async testApiKey(apiKey: string, provider?: Config["apiProvider"]): Promise<{valid: boolean, error?: string}> {
     // Auto-detect provider based on key format if not specified
     if (!provider) {
       if (apiKey.trim().startsWith('sk-')) {
@@ -325,6 +339,8 @@ export class ConfigHelper extends EventEmitter {
       return this.testGeminiKey(apiKey);
     } else if (provider === "anthropic") {
       return this.testAnthropicKey(apiKey);
+    } else if (provider === "bedrock") {
+      return { valid: true };
     }
     
     return { valid: false, error: "Unknown API provider" };
