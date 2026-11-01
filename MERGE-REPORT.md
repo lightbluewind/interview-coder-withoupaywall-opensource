@@ -120,3 +120,71 @@ Open items left for the owner (not fixed here):
 - Missing region silently defaults to `us-east-1`; `awsRegion` is not exposed in Settings.
 - `stealth-run.sh` from PR #153 was not taken (it deletes `.env` and build dirs).
 - `CLAUDE.md` from PR #153 was not taken (agent-instruction file).
+
+## Part 4 — Follow-ups
+
+### Bedrock credential honesty
+
+Chosen approach: resolve the AWS SDK default provider chain locally with
+`defaultProvider` from `@aws-sdk/credential-provider-node`, without making an explicit
+STS request from the settings flow. This can still query the standard EC2/ECS metadata
+endpoints when environment and shared-file credentials are absent, matching the SDK's
+production credential behavior; no AWS account or IAM API call is made.
+A successful check therefore means **configured, not verified**: readable credentials
+were found, but their IAM permissions and network reachability have not been tested.
+`hasApiKey()` uses the same credential check so startup and generation admission do not
+claim that Bedrock is ready when no credential can be resolved. When the configured
+provider is Bedrock but no region is set, the check fails with an actionable region error.
+
+Implemented:
+
+- Added the directly imported `@aws-sdk/credential-provider-node` dependency rather than
+  relying on a transitive package.
+- `ConfigHelper.hasApiKey()` now awaits the default chain and returns false when no
+  complete credential pair can be resolved.
+- `ConfigHelper.testApiKey(..., "bedrock")` returns a distinct missing-region or
+  unresolved-credentials error. On success it returns `verified: false`, plus a message
+  that IAM permissions and network access have not been checked.
+- The IPC validation path now delegates Bedrock and Claude Code checks to
+  `testApiKey()` instead of returning an unconditional `{ valid: true }`.
+
+### Explicit Bedrock region
+
+Implemented:
+
+- `SettingsDialog` exposes an `AWS Region` input only while Bedrock is selected. Bedrock
+  cannot be saved without a nonblank region.
+- `awsRegion` is included in the preload and renderer config contracts and is persisted
+  through `updateConfig`.
+- `ProcessingHelper` no longer falls back to `us-east-1` or an environment region. It uses
+  only the configured `awsRegion`; if it is missing, generation stops with an actionable
+  Settings error. Region changes trigger Bedrock client reinitialization, and the selected
+  region is logged during client initialization.
+- Generation also resolves Bedrock credentials before contacting the model and surfaces
+  missing-region/credential errors through the existing solution/debug error path. Queue,
+  debug, and solution views now display the actual error text instead of replacing it with
+  a generic message.
+
+### Lockfile consistency
+
+Implemented:
+
+- Ran a normal `npm install` with no version pins or `--force`/`--legacy-peer-deps`.
+- `package.json` and `package-lock.json` each changed by one line: added the direct
+  dependency declaration `@aws-sdk/credential-provider-node: ^3.972.92`.
+- No package nodes were added, removed, or version-changed by this follow-up install.
+  `@aws-sdk/client-bedrock-runtime@3.1161.0` and
+  `@aws-sdk/credential-provider-node@3.972.92` were already present in the current
+  lockfile from the prior Bedrock integration.
+
+### Verification
+
+| command | result | baseline |
+| --- | --- | --- |
+| `npx tsc --noEmit` | exit 2, **48 errors** | 48 — identical, no new |
+| `npx eslint src electron` | exit 1, **88 errors**, 0 warnings | 88 — identical, no new |
+| `npm run build` | **exit 0**, `dist/` + `dist-electron/` produced | — |
+
+Credential-chain smoke checks (using fake environment credentials and an empty `HOME`):
+the provider resolved the fake environment pair when present and rejected the same chain
+when no credentials were available. No real AWS request was made.

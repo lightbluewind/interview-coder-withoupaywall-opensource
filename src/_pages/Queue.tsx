@@ -105,7 +105,7 @@ const Queue: React.FC<QueueProps> = ({
       window.electronAPI.onSolutionError((error: string) => {
         showToast(
           "Processing Failed",
-          "There was an error processing your screenshots.",
+          error || "There was an error processing your screenshots.",
           "error"
         )
         setView("queue") // Revert to queue if processing fails

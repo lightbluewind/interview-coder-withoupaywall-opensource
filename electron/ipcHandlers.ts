@@ -25,7 +25,7 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
   ipcMain.handle("validate-api-key", async (_event, apiKey) => {
     const provider = configHelper.loadConfig().apiProvider;
     if (provider === "claude-code" || provider === "bedrock") {
-      return { valid: true };
+      return configHelper.testApiKey(apiKey, provider);
     }
 
     // First check the format
@@ -98,10 +98,19 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
   // Screenshot processing handlers
   ipcMain.handle("process-screenshots", async () => {
     // Check for API key before processing
-    if (!configHelper.hasApiKey()) {
+    if (!(await configHelper.hasApiKey())) {
       const mainWindow = deps.getMainWindow();
       if (mainWindow) {
-        mainWindow.webContents.send(deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        const config = configHelper.loadConfig();
+        if (config.apiProvider === "bedrock") {
+          const result = await configHelper.testApiKey("", "bedrock");
+          mainWindow.webContents.send(
+            deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+            result.error || "AWS credentials are not configured for Bedrock."
+          );
+        } else {
+          mainWindow.webContents.send(deps.PROCESSING_EVENTS.API_KEY_INVALID);
+        }
       }
       return;
     }
@@ -241,12 +250,21 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
   ipcMain.handle("trigger-process-screenshots", async () => {
     try {
       // Check for API key before processing
-      if (!configHelper.hasApiKey()) {
+      if (!(await configHelper.hasApiKey())) {
         const mainWindow = deps.getMainWindow();
         if (mainWindow) {
-          mainWindow.webContents.send(deps.PROCESSING_EVENTS.API_KEY_INVALID);
+          const config = configHelper.loadConfig();
+          if (config.apiProvider === "bedrock") {
+            const result = await configHelper.testApiKey("", "bedrock");
+            mainWindow.webContents.send(
+              deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+              result.error || "AWS credentials are not configured for Bedrock."
+            );
+          } else {
+            mainWindow.webContents.send(deps.PROCESSING_EVENTS.API_KEY_INVALID);
+          }
         }
-        return { success: false, error: "API key required" };
+        return { success: false, error: "AI provider configuration required" };
       }
       
       await deps.processingHelper?.processScreenshots()

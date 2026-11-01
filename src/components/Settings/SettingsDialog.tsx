@@ -237,6 +237,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
   const [extractionModel, setExtractionModel] = useState("gpt-4o");
   const [solutionModel, setSolutionModel] = useState("gpt-4o");
   const [debuggingModel, setDebuggingModel] = useState("gpt-4o");
+  const [awsRegion, setAwsRegion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [claudeCodeStatus, setClaudeCodeStatus] = useState<{
     installed: boolean; authenticated: boolean; email?: string; error?: string;
@@ -270,6 +271,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
         extractionModel?: string;
         solutionModel?: string;
         debuggingModel?: string;
+        awsRegion?: string;
       }
 
       window.electronAPI
@@ -280,6 +282,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
           setExtractionModel(config.extractionModel || "gpt-4o");
           setSolutionModel(config.solutionModel || "gpt-4o");
           setDebuggingModel(config.debuggingModel || "gpt-4o");
+          setAwsRegion(config.awsRegion || "");
         })
         .catch((error: unknown) => {
           console.error("Failed to load config:", error);
@@ -340,6 +343,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
         extractionModel,
         solutionModel,
         debuggingModel,
+        awsRegion: apiProvider === "bedrock" ? awsRegion.trim() : "",
       });
       
       if (result) {
@@ -591,11 +595,21 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
           </div>
           ) : (
           <div className="space-y-2">
-            <label className="text-sm font-medium text-white">AWS Credentials</label>
+            <label className="text-sm font-medium text-white" htmlFor="awsRegion">AWS Region</label>
+            <Input
+              id="awsRegion"
+              value={awsRegion}
+              onChange={(e) => setAwsRegion(e.target.value)}
+              placeholder="e.g. us-east-1"
+              className="bg-black/50 border-white/10 text-white"
+            />
+            <p className="text-xs text-white/50">
+              Bedrock requests, permissions, and charges use this region.
+            </p>
             <div className="mt-2 p-3 rounded-md bg-white/5 border border-white/10">
               <p className="text-xs text-white/80 mb-2">Bedrock uses your AWS credentials from the environment.</p>
               <p className="text-xs text-white/60 mb-1">1. Run <code className="bg-black/50 px-1 rounded">aws sso login</code> in terminal</p>
-              <p className="text-xs text-white/60 mb-1">2. Ensure AWS_REGION is set (default: us-east-1)</p>
+              <p className="text-xs text-white/60 mb-1">2. Enter the region above; there is no implicit default</p>
               <p className="text-xs text-white/60">3. Verify with <code className="bg-black/50 px-1 rounded">aws bedrock list-foundation-models</code></p>
             </div>
           </div>
@@ -721,7 +735,11 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
           <Button
             className="px-4 py-3 bg-white text-black rounded-xl font-medium hover:bg-white/90 transition-colors"
             onClick={handleSave}
-            disabled={isLoading || (apiProvider !== "claude-code" && apiProvider !== "bedrock" && !apiKey)}
+            disabled={
+              isLoading ||
+              (apiProvider !== "claude-code" && apiProvider !== "bedrock" && !apiKey) ||
+              (apiProvider === "bedrock" && !awsRegion.trim())
+            }
           >
             {isLoading ? "Saving..." : "Save Settings"}
           </Button>

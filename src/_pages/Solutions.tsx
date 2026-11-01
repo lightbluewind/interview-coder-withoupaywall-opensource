@@ -375,10 +375,10 @@ const Solutions: React.FC<SolutionsProps> = ({
         setDebugProcessing(false)
       }),
       //when there was an error in the initial debugging, we'll show a toast and stop the little generating pulsing thing.
-      window.electronAPI.onDebugError(() => {
+      window.electronAPI.onDebugError((error: string) => {
         showToast(
           "Processing Failed",
-          "There was an error debugging your code.",
+          error || "There was an error debugging your code.",
           "error"
         )
         setDebugProcessing(false)

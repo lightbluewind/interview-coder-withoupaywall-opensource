@@ -54,8 +54,35 @@ export interface ElectronAPI {
   getPlatform: () => string
   
   // New methods for OpenAI integration
-  getConfig: () => Promise<{ apiKey: string; model: string }>
-  updateConfig: (config: { apiKey?: string; model?: string }) => Promise<boolean>
+  getConfig: () => Promise<{
+    apiKey: string
+    apiProvider: "openai" | "gemini" | "anthropic" | "claude-code" | "bedrock"
+    extractionModel: string
+    solutionModel: string
+    debuggingModel: string
+    awsRegion?: string
+    language?: string
+    opacity?: number
+  }>
+  updateConfig: (config: {
+    apiKey?: string
+    apiProvider?: "openai" | "gemini" | "anthropic" | "claude-code" | "bedrock"
+    extractionModel?: string
+    solutionModel?: string
+    debuggingModel?: string
+    awsRegion?: string
+    language?: string
+    opacity?: number
+  }) => Promise<{
+    apiKey: string
+    apiProvider: "openai" | "gemini" | "anthropic" | "claude-code" | "bedrock"
+    extractionModel: string
+    solutionModel: string
+    debuggingModel: string
+    awsRegion?: string
+    language?: string
+    opacity?: number
+  }>
   checkApiKey: () => Promise<boolean>
   validateApiKey: (apiKey: string) => Promise<{ valid: boolean; error?: string }>
   openLink: (url: string) => void

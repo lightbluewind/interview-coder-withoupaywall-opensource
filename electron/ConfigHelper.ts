@@ -4,6 +4,7 @@ import path from "node:path"
 import { app } from "electron"
 import { EventEmitter } from "events"
 import { OpenAI } from "openai"
+import { defaultProvider as awsDefaultProvider } from "@aws-sdk/credential-provider-node"
 
 interface Config {
   apiKey: string;
@@ -15,6 +16,12 @@ interface Config {
   opacity: number;
   awsRegion?: string;
 }
+
+type ApiKeyTestResult = {
+  valid: boolean;
+  verified?: boolean;
+  error?: string;
+};
 
 export class ConfigHelper extends EventEmitter {
   private configPath: string;
@@ -219,6 +226,10 @@ export class ConfigHelper extends EventEmitter {
       if (updates.debuggingModel) {
         updates.debuggingModel = this.sanitizeModelSelection(updates.debuggingModel, provider);
       }
+
+      if (updates.awsRegion !== undefined) {
+        updates.awsRegion = updates.awsRegion.trim() || undefined;
+      }
       
       const newConfig = { ...currentConfig, ...updates };
       this.saveConfig(newConfig);
@@ -227,7 +238,8 @@ export class ConfigHelper extends EventEmitter {
       // This prevents re-initializing the AI client when only opacity changes
       if (updates.apiKey !== undefined || updates.apiProvider !== undefined || 
           updates.extractionModel !== undefined || updates.solutionModel !== undefined || 
-          updates.debuggingModel !== undefined || updates.language !== undefined) {
+          updates.debuggingModel !== undefined || updates.language !== undefined ||
+          updates.awsRegion !== undefined) {
         this.emit('config-updated', newConfig);
       }
       
@@ -241,12 +253,22 @@ export class ConfigHelper extends EventEmitter {
   /**
    * Check if the API key is configured
    */
-  public hasApiKey(): boolean {
+  public async hasApiKey(): Promise<boolean> {
     const config = this.loadConfig();
     // claude-code authenticates via the Claude Code CLI - no API key required
     if (config.apiProvider === "claude-code") return true;
     // Bedrock uses the AWS SDK credential chain rather than an API key.
-    if (config.apiProvider === "bedrock") return true;
+    if (config.apiProvider === "bedrock") {
+      if (!config.awsRegion?.trim()) return false;
+      try {
+        const credentials = await awsDefaultProvider()();
+        return Boolean(
+          credentials.accessKeyId?.trim() && credentials.secretAccessKey?.trim()
+        );
+      } catch {
+        return false;
+      }
+    }
     return !!config.apiKey && config.apiKey.trim().length > 0;
   }
   
@@ -316,7 +338,9 @@ export class ConfigHelper extends EventEmitter {
   /**
    * Test API key with the selected provider
    */
-  public async testApiKey(apiKey: string, provider?: Config["apiProvider"]): Promise<{valid: boolean, error?: string}> {
+  public async testApiKey(apiKey: string, provider?: Config["apiProvider"]): Promise<ApiKeyTestResult> {
+    const config = this.loadConfig();
+
     // Auto-detect provider based on key format if not specified
     if (!provider) {
       if (apiKey.trim().startsWith('sk-')) {
@@ -340,16 +364,51 @@ export class ConfigHelper extends EventEmitter {
     } else if (provider === "anthropic") {
       return this.testAnthropicKey(apiKey);
     } else if (provider === "bedrock") {
-      return { valid: true };
+      return this.testBedrockCredentials(config.awsRegion);
+    } else if (provider === "claude-code") {
+      return { valid: true, verified: false };
     }
     
     return { valid: false, error: "Unknown API provider" };
+  }
+
+  private async testBedrockCredentials(awsRegion?: string): Promise<ApiKeyTestResult> {
+    const region = awsRegion?.trim();
+    if (!region) {
+      return {
+        valid: false,
+        error: "AWS region is required for Bedrock. Enter a region such as us-east-1 in Settings."
+      };
+    }
+
+    try {
+      const credentials = await awsDefaultProvider()();
+      if (!credentials.accessKeyId?.trim() || !credentials.secretAccessKey?.trim()) {
+        return {
+          valid: false,
+          error: "No AWS credentials were found. Configure credentials with `aws configure` or `aws sso login`, then try again."
+        };
+      }
+
+      return {
+        valid: true,
+        verified: false,
+        error: "AWS credentials were found for this region, but access was not verified with AWS. Generation may still fail if the credentials lack Bedrock permissions or have expired."
+      };
+    } catch (error: unknown) {
+      console.error("AWS credential resolution failed:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        valid: false,
+        error: `No usable AWS credentials were found for region ${region}. Configure credentials with \`aws configure\` or \`aws sso login\`. ${message}`
+      };
+    }
   }
   
   /**
    * Test OpenAI API key
    */
-  private async testOpenAIKey(apiKey: string): Promise<{valid: boolean, error?: string}> {
+  private async testOpenAIKey(apiKey: string): Promise<ApiKeyTestResult> {
     try {
       const openai = new OpenAI({ apiKey });
       // Make a simple API call to test the key
@@ -379,7 +438,7 @@ export class ConfigHelper extends EventEmitter {
    * Test Gemini API key
    * Note: This is a simplified implementation since we don't have the actual Gemini client
    */
-  private async testGeminiKey(apiKey: string): Promise<{valid: boolean, error?: string}> {
+  private async testGeminiKey(apiKey: string): Promise<ApiKeyTestResult> {
     try {
       // For now, we'll just do a basic check to ensure the key exists and has valid format
       // In production, you would connect to the Gemini API and validate the key
@@ -404,7 +463,7 @@ export class ConfigHelper extends EventEmitter {
    * Test Anthropic API key
    * Note: This is a simplified implementation since we don't have the actual Anthropic client
    */
-  private async testAnthropicKey(apiKey: string): Promise<{valid: boolean, error?: string}> {
+  private async testAnthropicKey(apiKey: string): Promise<ApiKeyTestResult> {
     try {
       // For now, we'll just do a basic check to ensure the key exists and has valid format
       // In production, you would connect to the Anthropic API and validate the key

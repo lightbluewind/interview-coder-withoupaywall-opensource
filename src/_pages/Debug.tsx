@@ -200,7 +200,7 @@ const Debug: React.FC<DebugProps> = ({
       window.electronAPI.onDebugError((error: string) => {
         showToast(
           "Processing Failed",
-          "There was an error debugging your code.",
+          error || "There was an error debugging your code.",
           "error"
         )
         setIsProcessing(false)

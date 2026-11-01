@@ -15,6 +15,9 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+const BEDROCK_REGION_ERROR =
+  "AWS region is not configured. Open Settings, select AWS Bedrock, and enter the AWS region that should receive the request."
+
 // Interface for Gemini API requests
 interface GeminiMessage {
   role: string;
@@ -56,6 +59,10 @@ export class ProcessingHelper {
   private geminiApiKey: string | null = null
   private anthropicClient: Anthropic | null = null
   private bedrockClient: BedrockRuntimeClient | null = null
+
+  private getConfiguredBedrockRegion(): string | null {
+    return configHelper.loadConfig().awsRegion?.trim() || null
+  }
 
   // AbortControllers for API requests
   private currentProcessingAbortController: AbortController | null = null
@@ -142,10 +149,14 @@ export class ProcessingHelper {
         this.openaiClient = null;
         this.geminiApiKey = null;
         this.anthropicClient = null;
-        this.bedrockClient = new BedrockRuntimeClient({
-          region: config.awsRegion || process.env.AWS_REGION || "us-east-1"
-        });
-        console.log("Bedrock client initialized successfully");
+        const region = this.getConfiguredBedrockRegion();
+        if (region) {
+          this.bedrockClient = new BedrockRuntimeClient({ region });
+          console.log(`Bedrock client initialized with region ${region}`);
+        } else {
+          this.bedrockClient = null;
+          console.error(BEDROCK_REGION_ERROR);
+        }
       }
     } catch (error) {
       console.error("Failed to initialize AI client:", error);
@@ -228,7 +239,34 @@ export class ProcessingHelper {
     if (!mainWindow) return
 
     const config = configHelper.loadConfig();
-    
+
+    if (config.apiProvider === "bedrock") {
+      if (!this.getConfiguredBedrockRegion()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+          BEDROCK_REGION_ERROR
+        );
+        return;
+      }
+
+      let credentialsAvailable = false;
+      try {
+        credentialsAvailable = await configHelper.hasApiKey();
+      } catch (error) {
+        console.error("Failed to resolve AWS credentials:", error);
+      }
+
+      if (!credentialsAvailable) {
+        const credentialCheck = await configHelper.testApiKey("", "bedrock");
+        const error = credentialCheck.error || "AWS credentials are not configured for Bedrock.";
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+          error
+        );
+        return;
+      }
+    }
+
     // First verify we have a valid AI client
     if (config.apiProvider === "openai" && !this.openaiClient) {
       this.initializeAIClient();
@@ -261,9 +299,10 @@ export class ProcessingHelper {
       this.initializeAIClient();
 
       if (!this.bedrockClient) {
-        console.error("Bedrock client not initialized");
+        console.error(BEDROCK_REGION_ERROR);
         mainWindow.webContents.send(
-          this.deps.PROCESSING_EVENTS.API_KEY_INVALID
+          this.deps.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+          BEDROCK_REGION_ERROR
         );
         return;
       }
@@ -685,7 +724,7 @@ export class ProcessingHelper {
         if (!this.bedrockClient) {
           return {
             success: false,
-            error: "Bedrock client not initialized. Please check your AWS credentials."
+            error: BEDROCK_REGION_ERROR
           };
         }
 
@@ -994,7 +1033,7 @@ Your solution should be efficient, well-commented, and handle edge cases.
         if (!this.bedrockClient) {
           return {
             success: false,
-            error: "Bedrock client not initialized. Please check your AWS credentials."
+            error: BEDROCK_REGION_ERROR
           };
         }
 
@@ -1403,7 +1442,7 @@ If you include code examples, use proper markdown code blocks with language spec
         if (!this.bedrockClient) {
           return {
             success: false,
-            error: "Bedrock client not initialized. Please check your AWS credentials."
+            error: BEDROCK_REGION_ERROR
           };
         }
 

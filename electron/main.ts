@@ -526,7 +526,7 @@ async function initializeApp() {
     loadEnvVariables()
     
     // Ensure a configuration file exists
-    if (!configHelper.hasApiKey()) {
+    if (!(await configHelper.hasApiKey())) {
       console.log("No API key found in configuration. User will need to set up.")
     }
     
