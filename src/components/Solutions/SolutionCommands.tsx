@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react"
 import { useToast } from "../../contexts/toast"
 import { Screenshot } from "../../types/screenshots"
-import { supabase } from "../../lib/supabase"
 import { LanguageSelector } from "../shared/LanguageSelector"
 import { COMMAND_KEY } from "../../utils/platform"
 
@@ -17,13 +16,15 @@ export interface SolutionCommandsProps {
 
 const handleSignOut = async () => {
   try {
-    // Clear any local storage or electron-specific data first
+    // This build has no remote auth, so "log out" is a local-only clear:
+    // wipe browser storage and the API key stored in the Electron config,
+    // then reload so the app falls back to the welcome screen.
     localStorage.clear()
     sessionStorage.clear()
 
-    // Then sign out from Supabase
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    await window.electronAPI.updateConfig({ apiKey: "" })
+
+    window.location.reload()
   } catch (err) {
     console.error("Error signing out:", err)
   }

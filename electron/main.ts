@@ -296,8 +296,8 @@ async function createWindow(): Promise<void> {
     try {
       const parsedURL = new URL(url);
       const hostname = parsedURL.hostname;
-      const allowedHosts = ["google.com", "supabase.co"];
-      if (allowedHosts.includes(hostname) || hostname.endsWith(".google.com") || hostname.endsWith(".supabase.co")) {
+      const allowedHosts = ["google.com"];
+      if (allowedHosts.includes(hostname) || hostname.endsWith(".google.com")) {
         shell.openExternal(url);
         return { action: "deny" }; // Do not open this URL in a new Electron window
       }
